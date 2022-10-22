@@ -206,6 +206,7 @@ def main():
             plt.axis("equal")
             plt.grid(True)
             plt.pause(0.001)
+    input("\n press enter to exit\n")
 
 
 if __name__ == '__main__':
