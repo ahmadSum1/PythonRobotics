@@ -1,8 +1,9 @@
 """
 
-Extended kalman filter (EKF) localization sample
+Extended kalman filter (EKF) localization for asynchronus sensors
 
-author: Atsushi Sakai (@Atsushi_twi)
+author: Sakib Ahmed (@ahmadSum1)
+modified upon Atsushi Sakai (@Atsushi_twi) 's implementation
 
 """
 import sys
@@ -28,34 +29,44 @@ Q = np.diag([
 R = np.diag([1.0, 1.0]) ** 2  # Observation x,y position covariance
 
 #  Simulation parameter
-INPUT_NOISE = np.diag([1.0, np.deg2rad(30.0)]) ** 2
+ODOM_NOISE = np.diag([1.0, np.deg2rad(60.0)]) ** 2
 GPS_NOISE = np.diag([0.5, 0.5]) ** 2
 
-DT = 0.01  # time tick [s]
-SIM_TIME = 10.0  # simulation time [s]
+f_odom = 100
+f_gps = 1
+
+DT = 1/f_odom  # time tick [s]
+SIM_TIME = 25.0  # simulation time [s]
 
 show_animation = True
 
-
-def calc_input():
+# genarates the trajectory
+def calc_input(ccw=True):
     v = 1.0  # [m/s]
-    yawrate = 0.1  # [rad/s]
+    if ccw:
+        yawrate = 0.1  # [rad/s]
+    else:
+        yawrate = -0.1  # [rad/s]
     u = np.array([[v], [yawrate]])
     return u
 
 
-def observation(xTrue, xd, u):
+def observation_IMU_Odom(xdr, u):
     
-
-    # add noise to gps x-y
-    z = observation_model(xTrue) + GPS_NOISE @ np.random.randn(2, 1)
-
     # add noise to input
-    ud = u + INPUT_NOISE @ np.random.randn(2, 1)
+    ud = u + ODOM_NOISE @ np.random.normal( size=(2, 1))  #gaussian noise
 
-    xd = motion_model(xd, ud)
+    xdr = motion_model(xdr, ud)  #dead rekoning position
 
-    return z, xd, ud
+    return xdr, ud
+
+def observation_z(xTrue):
+    
+    # add noise to gps x-y
+    z = observation_model(xTrue) + GPS_NOISE @ np.random.normal( size=(2, 1))
+
+    return z
+
 
 
 def motion_model(x, u):
@@ -121,22 +132,6 @@ def jacob_h():
     return jH
 
 
-def ekf_estimation(xEst, PEst, z, u):
-    #  Predict
-    xPred = motion_model(xEst, u)
-    jF = jacob_f(xEst, u)
-    PPred = jF @ PEst @ jF.T + Q
-
-    #  Update
-    jH = jacob_h()
-    zPred = observation_model(xPred)
-    y = z - zPred
-    S = jH @ PPred @ jH.T + R
-    K = PPred @ jH.T @ np.linalg.inv(S)
-    xEst = xPred + K @ y
-    PEst = (np.eye(len(xEst)) - K @ jH) @ PPred
-    return xEst, PEst
-
 
 def plot_covariance_ellipse(xEst, PEst):  # pragma: no cover
     Pxy = PEst[0:2, 0:2]
@@ -179,15 +174,42 @@ def main():
     hxDR = xTrue
     hz = np.zeros((2, 1))
 
-    while SIM_TIME >= time:
-        time += DT
-        #calculate/update real trjectory/pose
-        u = calc_input()
+    # while SIM_TIME >= time:
+    #     time += DT
+    for k in range(int(SIM_TIME/DT)):
+
+        #calculate/update real trjectory/pose every 10ms
+        u = calc_input() #real movement
+
+        if k>SIM_TIME/DT/2: #change direction
+            u = calc_input(ccw=False)
+            
         xTrue = motion_model(xTrue, u) #true position
 
-        z, xDR, ud = observation(xTrue, xDR, u)
+        xDR, ud = observation_IMU_Odom(xDR, u)  # ud = measured movement/input; xDR = dead reckoning position, nothing to do with ekf, just for comparison;
 
-        xEst, PEst = ekf_estimation(xEst, PEst, z, ud)
+
+        #  Predict
+        xPred = motion_model(xEst, ud)
+        jF = jacob_f(xEst, ud)
+        PPred = jF @ PEst @ jF.T + Q                        # P is covariace matrix of the state,
+        
+        # at GPS measurement freq
+        if k%int(f_odom/f_gps) == 0:
+            z = observation_z(xTrue) #GPS data
+            #  Update
+            jH = jacob_h()
+            zPred = observation_model(xPred)
+            y = z - zPred
+            S = jH @ PPred @ jH.T + R
+            K = PPred @ jH.T @ np.linalg.inv(S)
+        
+            xEst = xPred + K @ y
+            PEst = (np.eye(len(xEst)) - K @ jH) @ PPred         # P is covariace matrix of the state,
+        else:
+            xEst = xPred
+            PEst = PPred
+
 
         # store data history
         hxEst = np.hstack((hxEst, xEst))
@@ -200,16 +222,20 @@ def main():
             # for stopping simulation with the esc key.
             plt.gcf().canvas.mpl_connect('key_release_event',
                     lambda event: [exit(0) if event.key == 'escape' else None])
-            plt.plot(hz[0, :], hz[1, :], ".g")
+            plt.plot(hz[0, :], hz[1, :], ".g", label="GPS")
             plt.plot(hxTrue[0, :].flatten(),
-                     hxTrue[1, :].flatten(), "-b")
+                     hxTrue[1, :].flatten(), "-b", label="Ground Truth")
             plt.plot(hxDR[0, :].flatten(),
-                     hxDR[1, :].flatten(), "-k")
+                     hxDR[1, :].flatten(), "-k", label="Dead Reckoning")
             plt.plot(hxEst[0, :].flatten(),
-                     hxEst[1, :].flatten(), "-r")
+                     hxEst[1, :].flatten(), "r", label="EKF")
             plot_covariance_ellipse(xEst, PEst)
             plt.axis("equal")
             plt.grid(True)
+            plt.legend(loc='upper left')
+            plt.title(  "Time = {:2f}s".format(k*DT),
+                        fontsize='small',
+                        loc='left')
             plt.pause(0.001)
     plt.show()
     # input("\n press enter to exit\n")
