@@ -12,6 +12,7 @@ sys.path.append(str(pathlib.Path(__file__).parent.parent.parent))
 import math
 import matplotlib.pyplot as plt
 import numpy as np
+np.random.seed(0)
 
 from utils.angle import rot_mat_2d
 
