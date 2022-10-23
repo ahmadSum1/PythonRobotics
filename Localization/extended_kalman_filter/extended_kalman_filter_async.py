@@ -24,7 +24,7 @@ Q = np.diag([
     0.1,  # variance of location on y-axis
     np.deg2rad(1.0),  # variance of yaw angle
     1.0  # variance of velocity
-]) ** 2  # predict state covariance
+    ]) ** 2  # predict state covariance
 R = np.diag([1.0, 1.0]) ** 2  # Observation x,y position covariance
 
 #  Simulation parameter
@@ -45,7 +45,7 @@ def calc_input():
 
 
 def observation(xTrue, xd, u):
-    xTrue = motion_model(xTrue, u)
+    
 
     # add noise to gps x-y
     z = observation_model(xTrue) + GPS_NOISE @ np.random.randn(2, 1)
@@ -55,7 +55,7 @@ def observation(xTrue, xd, u):
 
     xd = motion_model(xd, ud)
 
-    return xTrue, z, xd, ud
+    return z, xd, ud
 
 
 def motion_model(x, u):
@@ -181,9 +181,11 @@ def main():
 
     while SIM_TIME >= time:
         time += DT
+        #calculate/update real trjectory/pose
         u = calc_input()
+        xTrue = motion_model(xTrue, u) #true position
 
-        xTrue, z, xDR, ud = observation(xTrue, xDR, u)
+        z, xDR, ud = observation(xTrue, xDR, u)
 
         xEst, PEst = ekf_estimation(xEst, PEst, z, ud)
 
