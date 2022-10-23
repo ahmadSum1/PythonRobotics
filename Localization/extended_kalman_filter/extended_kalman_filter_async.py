@@ -24,19 +24,19 @@ Q = np.diag([
     0.1,  # variance of location on x-axis
     0.1,  # variance of location on y-axis
     np.deg2rad(1.0),  # variance of yaw angle
-    1.0  # variance of velocity
+    0.5  # variance of velocity
     ]) ** 2  # predict state covariance
-R = np.diag([1.0, 1.0]) ** 2  # Observation x,y position covariance
+R = np.diag([5.0, 5.0]) ** 2  # Observation x,y position covariance
 
 #  Simulation parameter
-ODOM_NOISE = np.diag([1.0, np.deg2rad(60.0)]) ** 2
+ODOM_NOISE = np.diag([1.0, np.deg2rad(30.0)]) ** 2
 GPS_NOISE = np.diag([0.5, 0.5]) ** 2
 
 f_odom = 100
 f_gps = 1
 
 DT = 1/f_odom  # time tick [s]
-SIM_TIME = 25.0  # simulation time [s]
+SIM_TIME = 50.0  # simulation time [s]
 
 show_animation = True
 
@@ -173,13 +173,14 @@ def main():
     hxTrue = xTrue
     hxDR = xTrue
     hz = np.zeros((2, 1))
+    z = np.zeros((2, 1))
 
     # while SIM_TIME >= time:
     #     time += DT
     for k in range(int(SIM_TIME/DT)):
 
         #calculate/update real trjectory/pose every 10ms
-        u = calc_input() #real movement
+        u = calc_input() #* np.array([[1],[0]]) #real movement
 
         if k>SIM_TIME/DT/2: #change direction
             u = calc_input(ccw=False)
@@ -228,7 +229,7 @@ def main():
             plt.plot(hxDR[0, :].flatten(),
                      hxDR[1, :].flatten(), "-k", label="Dead Reckoning")
             plt.plot(hxEst[0, :].flatten(),
-                     hxEst[1, :].flatten(), "r", label="EKF")
+                     hxEst[1, :].flatten(), ":r", label="EKF")
             plot_covariance_ellipse(xEst, PEst)
             plt.axis("equal")
             plt.grid(True)
@@ -238,6 +239,7 @@ def main():
                         loc='left')
             plt.pause(0.001)
     plt.show()
+   
     # input("\n press enter to exit\n")
 
 
